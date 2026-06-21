@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Client zip code dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/dist/tabler-icons.min.css" />
+<style>
+  :root {
+    --color-text-primary: #1a1a1a;
+    --color-text-secondary: #6b6b6b;
+    --color-text-info: #1d4ed8;
+    --color-text-warning: #92400e;
+    --color-text-danger: #b91c1c;
+    --color-text-success: #15803d;
+    --color-background-primary: #ffffff;
+    --color-background-secondary: #f7f6f3;
+    --color-background-info: #eaf1fd;
+    --color-background-warning: #fef3e0;
+    --color-background-danger: #fdecec;
+    --color-background-success: #eaf7ee;
+    --color-border-secondary: #d8d6d0;
+    --color-border-tertiary: #e6e4de;
+    --color-border-info: #1d4ed8;
+    --color-border-warning: #f3c97f;
+    --color-border-danger: #f3b4b4;
+    --color-border-success: #b8e0c4;
+    --border-radius-md: 8px;
+    --border-radius-lg: 12px;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-background-primary); }
+  input, select, button { font-family: var(--font-sans); font-size: 14px; }
+  input, select {
+    padding: 9px 11px;
+    border-radius: var(--border-radius-md);
+    border: 0.5px solid var(--color-border-secondary);
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+  }
+  #root { padding: 0 1.25rem; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- Firebase (shared online storage) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<!-- React (no build step) -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script>
+  // ====== FILL THIS IN with your Firebase project config ======
+  // Get this from: Firebase Console > Project settings > General > Your apps > SDK setup and configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyBdOeHd3gw939vH65dMEUe8pbhMtGz6Xfc",
+    authDomain: "client-zipcode-dashboard.firebaseapp.com",
+    databaseURL: "https://client-zipcode-dashboard-default-rtdb.firebaseio.com",
+    projectId: "client-zipcode-dashboard",
+    storageBucket: "client-zipcode-dashboard.firebasestorage.app",
+    messagingSenderId: "1093360594699",
+    appId: "1:1093360594699:web:7944dcd2754be54dc3fc0e"
+  };
+  // ==============================================================
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // Minimal shim so the rest of the app can keep calling window.storage.* unchanged
+  window.storage = {
+    async get(key, shared) {
+      const snap = await db.ref('storage/' + key).get();
+      if (!snap.exists()) return null;
+      return { key, value: snap.val(), shared: !!shared };
+    },
+    async set(key, value, shared) {
+      await db.ref('storage/' + key).set(value);
+      return { key, value, shared: !!shared };
+    },
+    async delete(key, shared) {
+      await db.ref('storage/' + key).remove();
+      return { key, deleted: true, shared: !!shared };
+    },
+    async list(prefix, shared) {
+      const snap = await db.ref('storage').get();
+      const all = snap.exists() ? Object.keys(snap.val()) : [];
+      const keys = prefix ? all.filter(k => k.startsWith(prefix)) : all;
+      return { keys, prefix, shared: !!shared };
+    }
+  };
+</script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback, Fragment } = React;
+
+const SEED = {"clients":[{"name":"Charles Dillard","specialty":"Pool Remodel","leadCount":39336,"zips":["75034","75078","76001","76008","76014","76020","76028","76034","76036","76058","76088","76092","76098","76123","76133","76177","76180","76244","76248","76262"]},{"name":"Chris Carson","specialty":"ADU","leadCount":18339,"zips":["78006","78023","78070","78130","78163","78209","78212","78230","78257","78258"]},{"name":"Guy Webber","specialty":"Roofing","leadCount":6887,"zips":["19341","19355","19425"]},{"name":"Jaro Habart","specialty":"Pool Remodel","leadCount":9410,"zips":["46037","46077"]},{"name":"Johan Martinez","specialty":"Hardscape","leadCount":42686,"zips":["91103","91765","92335","92336","92562","92590","92591","92592","92596","92618","92620","92860","92881","92886"]},{"name":"Jorge Ornelas","specialty":"Turf","leadCount":37478,"zips":["85015","85016","85018","85201","85202","85203","85204","85205","85206","85207","85224","85225","85226","85248","85249","85250","85251","85253","85255","85263","85264","85268","85286","85301","85302","85303","85304","85305","85306","85307","85308","85310","85331","85377"]},{"name":"Kee Sheridan","specialty":"Roofing","leadCount":68644,"zips":["20105","20117","20120","20121","20124","20132","20141","20147","20148","20151","20165","20175","20176","22015","22031","22039","22066","22101","22102","22124","22180"]},{"name":"Mike Castillo","specialty":"Turf","leadCount":32643,"zips":["32601","32603","32605","33036","33037","33040","33042","33043","33050","33051","33070","34102","34108","34145"]},{"name":"Rio Valentin","specialty":"Turf","leadCount":79380,"zips":["84003","84009","84010","84020","84025","84032","84040","84041","84042","84043","84045","84047","84048","84049","84062","84070","84075","84081","84084","84088","84092","84093","84094","84095","84096","84097","84098","84102","84103","84104","84108","84109","84121","84124","84770"]},{"name":"Sandy Reyes","specialty":"Pool Cleaning","leadCount":19044,"zips":["78613","78634","78660","78665","78681","78753"]},{"name":"Satveer Singh (Texas)","specialty":"Turf","leadCount":54659,"zips":["78613","78617","78626","78628","78633","78634","78641","78642","78660","78664","78665","78681","78704","78721"]},{"name":"Will Salazar","specialty":"Turf","leadCount":7688,"zips":["33033","33064","33180"]}]};
+
+const SPECIALTIES = ["Pool Remodel","Pool Cleaning","Roofing","Turf","Hardscape","ADU","Other"];
+const STORAGE_KEY = "clients-v1";
+
+function buildZipIndex(clients) {
+  const idx = {};
+  for (const c of clients) {
+    for (const z of c.zips) {
+      if (!idx[z]) idx[z] = [];
+      idx[z].push({ client: c.name, specialty: c.specialty });
+    }
+  }
+  return idx;
+}
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += ch;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === ',') { row.push(field); field = ''; }
+      else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else if (ch === '\r') { /* skip */ }
+      else field += ch;
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  if (!rows.length) return { headers: [], records: [] };
+  const headers = rows[0].map(h => h.trim());
+  const records = rows.slice(1).filter(r => r.some(c => c && c.trim() !== '')).map(r => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = (r[i] || '').trim(); });
+    return obj;
+  });
+  return { headers, records };
+}
+
+function extractZips(records, headers) {
+  const zipKey = headers.find(h => /postal|zip/i.test(h)) || null;
+  if (!zipKey) return [];
+  const zips = records.map(r => (r[zipKey] || '').trim()).filter(z => z !== '');
+  return Array.from(new Set(zips)).sort();
+}
+
+function nameFromFilename(filename) {
+  let n = filename.replace(/\.csv$/i, '');
+  n = n.replace(/_/g, ' ').trim();
+  n = n.replace(/\s+/g, ' ');
+  return n;
+}
+
+function App() {
+  const [clients, setClients] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [search, setSearch] = useState('');
+  const [activeSpecialty, setActiveSpecialty] = useState('All');
+  const [sortKey, setSortKey] = useState('name');
+  const [sortDir, setSortDir] = useState(1);
+  const [dragOver, setDragOver] = useState(false);
+  const [pendingImport, setPendingImport] = useState(null);
+  const [addZipClient, setAddZipClient] = useState(null);
+  const [addZipValue, setAddZipValue] = useState('');
+  const [addZipConflict, setAddZipConflict] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [expandedClient, setExpandedClient] = useState(null);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await window.storage.get(STORAGE_KEY, true);
+        if (res && res.value) {
+          setClients(JSON.parse(res.value));
+        } else {
+          setClients(SEED.clients);
+          await window.storage.set(STORAGE_KEY, JSON.stringify(SEED.clients), true);
+        }
+      } catch (e) {
+        setClients(SEED.clients);
+      }
+      setLoaded(true);
+    })();
+
+    // Live updates: if a teammate changes data, refresh automatically.
+    const ref = firebase.database().ref('storage/' + STORAGE_KEY);
+    const handler = (snap) => {
+      if (snap.exists()) {
+        try { setClients(JSON.parse(snap.val())); } catch (e) {}
+      }
+    };
+    ref.on('value', handler);
+    return () => ref.off('value', handler);
+  }, []);
+
+  const persist = useCallback(async (next) => {
+    setClients(next);
+    try {
+      await window.storage.set(STORAGE_KEY, JSON.stringify(next), true);
+    } catch (e) {
+      showToast('Could not save — storage error', 'error');
+    }
+  }, []);
+
+  async function refreshFromStorage() {
+    try {
+      const res = await window.storage.get(STORAGE_KEY, true);
+      if (res && res.value) setClients(JSON.parse(res.value));
+    } catch (e) { /* ignore */ }
+  }
+
+  function showToast(msg, kind) {
+    setToast({ msg, kind: kind || 'ok' });
+    setTimeout(() => setToast(null), 3200);
+  }
+
+  const zipIndex = clients ? buildZipIndex(clients) : {};
+  const overlapZips = Object.keys(zipIndex).filter(z => zipIndex[z].length > 1).sort();
+
+  function handleFiles(files) {
+    if (!files || !files.length) return;
+    const file = files[0];
+    if (!/\.csv$/i.test(file.name)) {
+      showToast('Please drop a .csv file', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const { headers, records } = parseCSV(text);
+      const zips = extractZips(records, headers);
+      if (!zips.length) {
+        showToast('No postal/zip code column found in that file', 'error');
+        return;
+      }
+      const guessedName = nameFromFilename(file.name);
+      const existing = clients.find(c => c.name.toLowerCase() === guessedName.toLowerCase());
+      setPendingImport({
+        filename: file.name,
+        guessedName,
+        leadCount: records.length,
+        zips,
+        existingMatch: existing ? existing.name : null,
+        clientName: existing ? existing.name : guessedName,
+        specialty: existing ? existing.specialty : SPECIALTIES[0],
+        mode: existing ? 'merge' : 'new'
+      });
+    };
+    reader.readAsText(file);
+  }
+
+  function confirmImport() {
+    if (!pendingImport) return;
+    const { clientName, specialty, zips, leadCount } = pendingImport;
+    const idx = clients.findIndex(c => c.name.toLowerCase() === clientName.toLowerCase());
+    let next;
+    if (idx >= 0) {
+      const merged = Array.from(new Set([...clients[idx].zips, ...zips])).sort();
+      const addedCount = merged.length - clients[idx].zips.length;
+      next = clients.slice();
+      next[idx] = { ...next[idx], specialty, leadCount: next[idx].leadCount + leadCount, zips: merged };
+      persist(next);
+      showToast(`Updated ${clientName} — added ${addedCount} new zip${addedCount !== 1 ? 's' : ''}`, 'ok');
+    } else {
+      next = [...clients, { name: clientName, specialty, leadCount, zips: Array.from(new Set(zips)).sort() }];
+      persist(next);
+      showToast(`Added new client ${clientName}`, 'ok');
+    }
+    setPendingImport(null);
+  }
+
+  function openAddZip(clientName) {
+    setAddZipClient(clientName);
+    setAddZipValue('');
+    setAddZipConflict(null);
+  }
+
+  function checkZipConflict(zip) {
+    const entries = zipIndex[zip];
+    if (!entries) return null;
+    const others = entries.filter(e => e.client !== addZipClient);
+    return others.length ? others : null;
+  }
+
+  function onAddZipInput(v) {
+    const digits = v.replace(/[^0-9]/g, '').slice(0, 10);
+    setAddZipValue(digits);
+    setAddZipConflict(digits ? checkZipConflict(digits) : null);
+  }
+
+  function confirmAddZip(force) {
+    if (!addZipValue) return;
+    const conflict = checkZipConflict(addZipValue);
+    if (conflict && !force) return;
+    const idx = clients.findIndex(c => c.name === addZipClient);
+    if (idx < 0) return;
+    if (clients[idx].zips.includes(addZipValue)) {
+      showToast(`${addZipClient} already has ${addZipValue}`, 'error');
+      setAddZipClient(null);
+      return;
+    }
+    const next = clients.slice();
+    next[idx] = { ...next[idx], zips: [...next[idx].zips, addZipValue].sort() };
+    persist(next);
+    showToast(`Added ${addZipValue} to ${addZipClient}`, 'ok');
+    setAddZipClient(null);
+  }
+
+  function removeZip(clientName, zip) {
+    const idx = clients.findIndex(c => c.name === clientName);
+    if (idx < 0) return;
+    const next = clients.slice();
+    next[idx] = { ...next[idx], zips: next[idx].zips.filter(z => z !== zip) };
+    persist(next);
+    showToast(`Removed ${zip} from ${clientName}`, 'ok');
+  }
+
+  function deleteClient(clientName) {
+    const next = clients.filter(c => c.name !== clientName);
+    persist(next);
+    showToast(`Removed client ${clientName}`, 'ok');
+  }
+
+  if (!loaded || !clients) {
+    return (
+      <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-sans)' }}>
+        Loading client data…
+      </div>
+    );
+  }
+
+  const specialtiesPresent = ['All', ...Array.from(new Set(clients.map(c => c.specialty))).sort()];
+
+  let rows = clients.slice();
+  if (activeSpecialty !== 'All') rows = rows.filter(c => c.specialty === activeSpecialty);
+  if (search.trim()) {
+    const q = search.trim().toLowerCase();
+    rows = rows.filter(c => c.name.toLowerCase().includes(q) || c.zips.some(z => z.includes(q)));
+  }
+  rows.sort((a, b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if (sortKey === 'zipCount') { av = a.zips.length; bv = b.zips.length; }
+    if (typeof av === 'string') { av = av.toLowerCase(); bv = bv.toLowerCase(); }
+    if (av < bv) return -1 * sortDir;
+    if (av > bv) return 1 * sortDir;
+    return 0;
+  });
+
+  const totalLeads = clients.reduce((s, c) => s + c.leadCount, 0);
+  const totalZips = Object.keys(zipIndex).length;
+
+  return (
+    <div style={{ fontFamily: 'var(--font-sans)', color: 'var(--color-text-primary)', maxWidth: 980, margin: '0 auto', padding: '0 0 3rem' }}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
+    >
+      <style>{`
+        .clx-btn { background: transparent; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); padding: 8px 14px; font-size: 13px; cursor: pointer; color: var(--color-text-primary); }
+        .clx-btn:hover { background: var(--color-background-secondary); }
+        .clx-btn.primary { background: var(--color-text-primary); color: var(--color-background-primary); border-color: var(--color-text-primary); }
+        .clx-chip { font-size: 12px; padding: 6px 12px; border-radius: 20px; border: 0.5px solid var(--color-border-tertiary); cursor: pointer; color: var(--color-text-secondary); background: var(--color-background-primary); }
+        .clx-chip.active { background: var(--color-text-primary); color: var(--color-background-primary); border-color: var(--color-text-primary); }
+        .clx-pill { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 11.5px; background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: 5px; padding: 2px 6px; margin: 0 4px 4px 0; }
+        .clx-pill.overlap { background: var(--color-background-warning); border-color: var(--color-border-warning); color: var(--color-text-warning); }
+        .clx-pill button { border: none; background: none; cursor: pointer; color: inherit; opacity: 0.6; padding: 0; font-size: 11px; line-height: 1; }
+        .clx-pill button:hover { opacity: 1; }
+        .clx-input { width: 100%; }
+        table.clx-table { width: 100%; border-collapse: collapse; }
+        table.clx-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--color-text-secondary); padding: 10px 12px; border-bottom: 0.5px solid var(--color-border-tertiary); cursor: pointer; white-space: nowrap; }
+        table.clx-table td { padding: 12px; font-size: 14px; vertical-align: top; border-bottom: 0.5px solid var(--color-border-tertiary); }
+        table.clx-table tr:hover td { background: var(--color-background-secondary); }
+      `}</style>
+
+      <div style={{ padding: '1.5rem 0 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div>
+          <p style={{ fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--color-text-secondary)', margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            Territory manager
+            <span style={{ background: 'var(--color-background-info)', color: 'var(--color-text-info)', padding: '2px 8px', borderRadius: 20, fontSize: 10, letterSpacing: '.04em' }}>
+              <i className="ti ti-users" aria-hidden="true" style={{ fontSize: 11, verticalAlign: '-1px', marginRight: 3 }}></i>Shared
+            </span>
+          </p>
+          <h1 style={{ fontSize: 22, fontWeight: 500, margin: '0 0 6px' }}>Client zip code dashboard</h1>
+          <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.6 }}>
+            {clients.length} clients · {totalZips} unique zips · {totalLeads.toLocaleString()} total leads. Everyone with this link sees the same live data.
+          </p>
+        </div>
+        <button className="clx-btn" style={{ flexShrink: 0 }} onClick={async () => { await refreshFromStorage(); showToast('Refreshed', 'ok'); }}>
+          <i className="ti ti-refresh" aria-hidden="true" style={{ fontSize: 14, verticalAlign: '-2px', marginRight: 4 }}></i>Refresh
+        </button>
+      </div>
+
+      <div
+        style={{
+          border: `1.5px dashed ${dragOver ? 'var(--color-border-info)' : 'var(--color-border-secondary)'}`,
+          borderRadius: 'var(--border-radius-lg)',
+          background: dragOver ? 'var(--color-background-info)' : 'var(--color-background-secondary)',
+          padding: '1.75rem',
+          textAlign: 'center',
+          marginBottom: '1.5rem',
+          cursor: 'pointer'
+        }}
+        onClick={() => fileInputRef.current && fileInputRef.current.click()}
+      >
+        <i className="ti ti-file-upload" aria-hidden="true" style={{ fontSize: 26, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 8 }}></i>
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 500 }}>Drop a client CSV here, or click to browse</p>
+        <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--color-text-secondary)' }}>We'll detect the zip/postal code column and match it to an existing client, or create a new one.</p>
+        <input ref={fileInputRef} type="file" accept=".csv" style={{ display: 'none' }}
+          onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
+      </div>
+
+      {pendingImport && (
+        <div style={{ background: 'var(--color-background-primary)', border: '0.5px solid var(--color-border-secondary)', borderRadius: 'var(--border-radius-lg)', padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
+          <p style={{ fontSize: 13, fontWeight: 500, margin: '0 0 12px' }}>
+            {pendingImport.mode === 'merge' || pendingImport.existingMatch ? 'Update existing client?' : 'Add new client?'}
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 4 }}>Client name</label>
+              <select className="clx-input" value={pendingImport.clientName}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const match = clients.find(c => c.name === val);
+                  setPendingImport(p => ({ ...p, clientName: val, specialty: match ? match.specialty : p.specialty }));
+                }}>
+                <option value={pendingImport.guessedName}>{pendingImport.guessedName} (new)</option>
+                {clients.map(c => <option key={c.name} value={c.name}>{c.name} (existing — merge)</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 4 }}>Specialty</label>
+              <select className="clx-input" value={pendingImport.specialty}
+                onChange={(e) => setPendingImport(p => ({ ...p, specialty: e.target.value }))}>
+                {SPECIALTIES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '0 0 14px' }}>
+            {pendingImport.filename}: {pendingImport.leadCount.toLocaleString()} leads, {pendingImport.zips.length} unique zip codes.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="clx-btn primary" onClick={confirmImport}>Confirm</button>
+            <button className="clx-btn" onClick={() => setPendingImport(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {overlapZips.length > 0 && (
+        <div style={{ background: 'var(--color-background-warning)', border: '0.5px solid var(--color-border-warning)', borderRadius: 'var(--border-radius-lg)', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+          <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-warning)', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <i className="ti ti-alert-triangle" aria-hidden="true" style={{ fontSize: 16 }}></i>
+            {overlapZips.length} zip code{overlapZips.length !== 1 ? 's' : ''} shared by more than one client
+          </p>
+          <div style={{ fontSize: 13, lineHeight: 1.9, color: 'var(--color-text-warning)' }}>
+            {overlapZips.map(z => (
+              <div key={z}><span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{z}</span> — {zipIndex[z].map(e => `${e.client} (${e.specialty})`).join(' + ')}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <input className="clx-input" style={{ maxWidth: 280 }} placeholder="Search client or zip…"
+          value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {specialtiesPresent.map(s => (
+            <span key={s} className={`clx-chip ${activeSpecialty === s ? 'active' : ''}`} onClick={() => setActiveSpecialty(s)}>{s}</span>
+          ))}
+        </div>
+      </div>
+
+      <table className="clx-table">
+        <thead>
+          <tr>
+            <th onClick={() => { setSortKey('name'); setSortDir(sortKey === 'name' ? -sortDir : 1); }}>Client</th>
+            <th onClick={() => { setSortKey('specialty'); setSortDir(sortKey === 'specialty' ? -sortDir : 1); }}>Specialty</th>
+            <th onClick={() => { setSortKey('leadCount'); setSortDir(sortKey === 'leadCount' ? -sortDir : 1); }}>Leads</th>
+            <th onClick={() => { setSortKey('zipCount'); setSortDir(sortKey === 'zipCount' ? -sortDir : 1); }}>Zips</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(c => (
+            <Fragment key={c.name}>
+              <tr>
+                <td style={{ fontWeight: 500 }}>{c.name}</td>
+                <td>
+                  <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em', padding: '3px 9px', borderRadius: 20, background: 'var(--color-background-secondary)', color: 'var(--color-text-secondary)' }}>{c.specialty}</span>
+                </td>
+                <td style={{ fontFamily: 'var(--font-mono)' }}>{c.leadCount.toLocaleString()}</td>
+                <td style={{ fontFamily: 'var(--font-mono)' }}>{c.zips.length}</td>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <button className="clx-btn" style={{ marginRight: 6 }} onClick={() => setExpandedClient(expandedClient === c.name ? null : c.name)}>
+                    {expandedClient === c.name ? 'Hide zips' : 'View zips'}
+                  </button>
+                  <button className="clx-btn" onClick={() => openAddZip(c.name)}>+ Zip</button>
+                </td>
+              </tr>
+              {expandedClient === c.name && (
+                <tr>
+                  <td colSpan={5} style={{ background: 'var(--color-background-secondary)' }}>
+                    <div style={{ marginBottom: 8 }}>
+                      {c.zips.length === 0 && <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>No zip codes yet.</span>}
+                      {c.zips.map(z => (
+                        <span key={z} className={`clx-pill ${zipIndex[z].length > 1 ? 'overlap' : ''}`}>
+                          {z}
+                          <button aria-label={`Remove ${z}`} onClick={() => removeZip(c.name, z)}><i className="ti ti-x" aria-hidden="true" style={{ fontSize: 11 }}></i></button>
+                        </span>
+                      ))}
+                    </div>
+                    <button className="clx-btn" style={{ color: 'var(--color-text-danger)', borderColor: 'var(--color-border-danger)' }} onClick={() => { if (window.confirm(`Remove client ${c.name}? This deletes all their zip data.`)) deleteClient(c.name); }}>
+                      Delete client
+                    </button>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+          {rows.length === 0 && (
+            <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '2rem' }}>No clients match.</td></tr>
+          )}
+        </tbody>
+      </table>
+
+      {addZipClient && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}
+          onClick={() => setAddZipClient(null)}>
+          <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', padding: '1.5rem', width: 360, maxWidth: '90vw' }}
+            onClick={(e) => e.stopPropagation()}>
+            <p style={{ fontSize: 15, fontWeight: 500, margin: '0 0 4px' }}>Add zip code to {addZipClient}</p>
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '0 0 14px' }}>We'll check it isn't already claimed by another client.</p>
+            <input className="clx-input" autoFocus inputMode="numeric" placeholder="e.g. 78613" value={addZipValue}
+              onChange={(e) => onAddZipInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !addZipConflict) confirmAddZip(false); }} />
+            {addZipConflict && (
+              <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-background-danger)', border: '0.5px solid var(--color-border-danger)', borderRadius: 'var(--border-radius-md)' }}>
+                <p style={{ fontSize: 13, color: 'var(--color-text-danger)', margin: '0 0 6px', fontWeight: 500 }}>
+                  Already in use — don't buy this one
+                </p>
+                {addZipConflict.map((e, i) => (
+                  <p key={i} style={{ fontSize: 12.5, color: 'var(--color-text-danger)', margin: 0 }}>{e.client} ({e.specialty})</p>
+                ))}
+              </div>
+            )}
+            {!addZipConflict && addZipValue && (
+              <p style={{ fontSize: 12.5, color: 'var(--color-text-success)', margin: '10px 0 0', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <i className="ti ti-check" aria-hidden="true" style={{ fontSize: 14 }}></i> Available — no other client has this zip
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <button className="clx-btn primary" disabled={!addZipValue || !!addZipConflict} style={{ opacity: (!addZipValue || addZipConflict) ? 0.4 : 1 }} onClick={() => confirmAddZip(false)}>Add zip</button>
+              <button className="clx-btn" onClick={() => setAddZipClient(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          background: toast.kind === 'error' ? 'var(--color-background-danger)' : 'var(--color-background-success)',
+          color: toast.kind === 'error' ? 'var(--color-text-danger)' : 'var(--color-text-success)',
+          border: `0.5px solid ${toast.kind === 'error' ? 'var(--color-border-danger)' : 'var(--color-border-success)'}`,
+          borderRadius: 'var(--border-radius-md)', padding: '10px 18px', fontSize: 13.5, zIndex: 100
+        }}>
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
