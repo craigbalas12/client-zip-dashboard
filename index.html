@@ -224,7 +224,14 @@ function App() {
   }
 
   const zipIndex = clients ? buildZipIndex(clients) : {};
-  const overlapZips = Object.keys(zipIndex).filter(z => zipIndex[z].length > 1).sort();
+  function isSameSpecialtyOverlap(zip) {
+    const entries = zipIndex[zip];
+    if (!entries || entries.length < 2) return false;
+    const bySpecialty = {};
+    entries.forEach(e => { bySpecialty[e.specialty] = (bySpecialty[e.specialty] || 0) + 1; });
+    return Object.values(bySpecialty).some(count => count > 1);
+  }
+  const overlapZips = Object.keys(zipIndex).filter(isSameSpecialtyOverlap).sort();
 
   function handleFiles(files) {
     if (!files || !files.length) return;
@@ -287,8 +294,12 @@ function App() {
   function checkZipConflict(zip) {
     const entries = zipIndex[zip];
     if (!entries) return null;
+    const addingClient = clients.find(c => c.name === addZipClient);
     const others = entries.filter(e => e.client !== addZipClient);
-    return others.length ? others : null;
+    if (!others.length) return null;
+    const sameSpecialty = others.filter(e => addingClient && e.specialty === addingClient.specialty);
+    const diffSpecialty = others.filter(e => !addingClient || e.specialty !== addingClient.specialty);
+    return { sameSpecialty, diffSpecialty, blocking: sameSpecialty.length > 0 };
   }
 
   function onAddZipInput(v) {
@@ -300,7 +311,7 @@ function App() {
   function confirmAddZip(force) {
     if (!addZipValue) return;
     const conflict = checkZipConflict(addZipValue);
-    if (conflict && !force) return;
+    if (conflict && conflict.blocking && !force) return;
     const idx = clients.findIndex(c => c.name === addZipClient);
     if (idx < 0) return;
     if (clients[idx].zips.includes(addZipValue)) {
@@ -458,7 +469,7 @@ function App() {
         <div style={{ background: 'var(--color-background-warning)', border: '0.5px solid var(--color-border-warning)', borderRadius: 'var(--border-radius-lg)', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-warning)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
             <i className="ti ti-alert-triangle" aria-hidden="true" style={{ fontSize: 16 }}></i>
-            {overlapZips.length} zip code{overlapZips.length !== 1 ? 's' : ''} shared by more than one client
+            {overlapZips.length} zip code{overlapZips.length !== 1 ? 's' : ''} double-booked within the same specialty
           </p>
           <button className="clx-btn" style={{ borderColor: 'var(--color-border-warning)', color: 'var(--color-text-warning)' }} onClick={() => setShowOverlaps(true)}>
             View overlaps
@@ -478,7 +489,7 @@ function App() {
               </button>
             </div>
             <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '0 0 14px' }}>
-              {overlapZips.length} zip code{overlapZips.length !== 1 ? 's' : ''} claimed by more than one client.
+              {overlapZips.length} zip code{overlapZips.length !== 1 ? 's' : ''} claimed by more than one client in the same specialty.
             </p>
             <div style={{ overflowY: 'auto', flex: 1, fontSize: 13, lineHeight: 1.9, color: 'var(--color-text-warning)', background: 'var(--color-background-warning)', border: '0.5px solid var(--color-border-warning)', borderRadius: 'var(--border-radius-md)', padding: '12px 14px' }}>
               {overlapZips.map(z => (
@@ -533,7 +544,7 @@ function App() {
                     <div style={{ marginBottom: 8 }}>
                       {c.zips.length === 0 && <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>No zip codes yet.</span>}
                       {c.zips.map(z => (
-                        <span key={z} className={`clx-pill ${zipIndex[z].length > 1 ? 'overlap' : ''}`}>
+                        <span key={z} className={`clx-pill ${isSameSpecialtyOverlap(z) ? 'overlap' : ''}`}>
                           {z}
                           <button aria-label={`Remove ${z}`} onClick={() => removeZip(c.name, z)}><i className="ti ti-x" aria-hidden="true" style={{ fontSize: 11 }}></i></button>
                         </span>
@@ -559,17 +570,27 @@ function App() {
           <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', padding: '1.5rem', width: 360, maxWidth: '90vw' }}
             onClick={(e) => e.stopPropagation()}>
             <p style={{ fontSize: 15, fontWeight: 500, margin: '0 0 4px' }}>Add zip code to {addZipClient}</p>
-            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '0 0 14px' }}>We'll check it isn't already claimed by another client.</p>
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '0 0 14px' }}>Same-specialty exclusivity is enforced; other industries can share a zip.</p>
             <input className="clx-input" autoFocus inputMode="numeric" placeholder="e.g. 78613" value={addZipValue}
               onChange={(e) => onAddZipInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !addZipConflict) confirmAddZip(false); }} />
-            {addZipConflict && (
+              onKeyDown={(e) => { if (e.key === 'Enter' && !(addZipConflict && addZipConflict.blocking)) confirmAddZip(true); }} />
+            {addZipConflict && addZipConflict.sameSpecialty.length > 0 && (
               <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-background-danger)', border: '0.5px solid var(--color-border-danger)', borderRadius: 'var(--border-radius-md)' }}>
                 <p style={{ fontSize: 13, color: 'var(--color-text-danger)', margin: '0 0 6px', fontWeight: 500 }}>
-                  Already in use — don't buy this one
+                  Already claimed in this specialty — don't buy this one
                 </p>
-                {addZipConflict.map((e, i) => (
+                {addZipConflict.sameSpecialty.map((e, i) => (
                   <p key={i} style={{ fontSize: 12.5, color: 'var(--color-text-danger)', margin: 0 }}>{e.client} ({e.specialty})</p>
+                ))}
+              </div>
+            )}
+            {addZipConflict && addZipConflict.diffSpecialty.length > 0 && (
+              <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-background-warning)', border: '0.5px solid var(--color-border-warning)', borderRadius: 'var(--border-radius-md)' }}>
+                <p style={{ fontSize: 13, color: 'var(--color-text-warning)', margin: '0 0 6px', fontWeight: 500 }}>
+                  Already used by a different industry — okay to share
+                </p>
+                {addZipConflict.diffSpecialty.map((e, i) => (
+                  <p key={i} style={{ fontSize: 12.5, color: 'var(--color-text-warning)', margin: 0 }}>{e.client} ({e.specialty})</p>
                 ))}
               </div>
             )}
@@ -579,7 +600,7 @@ function App() {
               </p>
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-              <button className="clx-btn primary" disabled={!addZipValue || !!addZipConflict} style={{ opacity: (!addZipValue || addZipConflict) ? 0.4 : 1 }} onClick={() => confirmAddZip(false)}>Add zip</button>
+              <button className="clx-btn primary" disabled={!addZipValue || !!(addZipConflict && addZipConflict.blocking)} style={{ opacity: (!addZipValue || (addZipConflict && addZipConflict.blocking)) ? 0.4 : 1 }} onClick={() => confirmAddZip(true)}>Add zip</button>
               <button className="clx-btn" onClick={() => setAddZipClient(null)}>Cancel</button>
             </div>
           </div>
