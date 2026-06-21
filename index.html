@@ -172,6 +172,7 @@ function App() {
   const [addZipConflict, setAddZipConflict] = useState(null);
   const [toast, setToast] = useState(null);
   const [expandedClient, setExpandedClient] = useState(null);
+  const [showOverlaps, setShowOverlaps] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -454,20 +455,42 @@ function App() {
       )}
 
       {overlapZips.length > 0 && (
-        <div style={{ background: 'var(--color-background-warning)', border: '0.5px solid var(--color-border-warning)', borderRadius: 'var(--border-radius-lg)', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
-          <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-warning)', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ background: 'var(--color-background-warning)', border: '0.5px solid var(--color-border-warning)', borderRadius: 'var(--border-radius-lg)', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-warning)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
             <i className="ti ti-alert-triangle" aria-hidden="true" style={{ fontSize: 16 }}></i>
             {overlapZips.length} zip code{overlapZips.length !== 1 ? 's' : ''} shared by more than one client
           </p>
-          <div style={{ fontSize: 13, lineHeight: 1.9, color: 'var(--color-text-warning)' }}>
-            {overlapZips.map(z => (
-              <div key={z}><span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{z}</span> — {zipIndex[z].map(e => `${e.client} (${e.specialty})`).join(' + ')}</div>
-            ))}
+          <button className="clx-btn" style={{ borderColor: 'var(--color-border-warning)', color: 'var(--color-text-warning)' }} onClick={() => setShowOverlaps(true)}>
+            View overlaps
+          </button>
+        </div>
+      )}
+
+      {showOverlaps && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}
+          onClick={() => setShowOverlaps(false)}>
+          <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', padding: '1.5rem', width: 520, maxWidth: '90vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <p style={{ fontSize: 15, fontWeight: 500, margin: 0 }}>Overlapping zip codes</p>
+              <button className="clx-btn" style={{ padding: '4px 8px' }} onClick={() => setShowOverlaps(false)} aria-label="Close">
+                <i className="ti ti-x" aria-hidden="true" style={{ fontSize: 14 }}></i>
+              </button>
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '0 0 14px' }}>
+              {overlapZips.length} zip code{overlapZips.length !== 1 ? 's' : ''} claimed by more than one client.
+            </p>
+            <div style={{ overflowY: 'auto', flex: 1, fontSize: 13, lineHeight: 1.9, color: 'var(--color-text-warning)', background: 'var(--color-background-warning)', border: '0.5px solid var(--color-border-warning)', borderRadius: 'var(--border-radius-md)', padding: '12px 14px' }}>
+              {overlapZips.map(z => (
+                <div key={z}><span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{z}</span> — {zipIndex[z].map(e => `${e.client} (${e.specialty})`).join(' + ')}</div>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
+
         <input className="clx-input" style={{ maxWidth: 280 }} placeholder="Search client or zip…"
           value={search} onChange={(e) => setSearch(e.target.value)} />
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
